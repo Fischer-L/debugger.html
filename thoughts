@@ -1,0 +1,111 @@
+@jasonLaster 
+
+Would like to know the previous discussion about this topic and have a discussion with you about the possible approach before proceeding, thanks. Below is my thoughts.
+
+Check out Chrome, looks like Chrome goes *call-stack* approach, which means as long as variables are visible from the bp's call stack (maybe closure variables, this etc), even those variables are inside a far away function. We still can preview on it, see Chrome Preview[3]. We not necessarily want to do that since probably the nearest enclosing function is the main focus and codes inside some far away functions don't matter during debugging.
+
+#### Possible approach:
+Here our topic is how to approach those functions inside the nearest bp-enclosing function. Consider the code example snippet below:
+```js
+// With the below partial example script, there will be a locations array as
+// [
+//   ... ...
+//   { end: 8, start:  6  }, // Location 1 before `processNums`
+//   { end: 25, start: 12 }, // Location 2 within `processNums`
+//   { end: 18, start: 16 }, // Location 3 within `processNums`
+//   { end: 22, start: 20 }, // Location 4 within `processNums`
+//   { end: 36, start: 29 }, // Location 5  after `processNums`
+//   ... ...
+// ]
+// 
+// If set a bp at Line 24, during debugging we might expect able to 
+// preview on Location 2 ~ 4.
+
+// Some other functions befoer `processNums`......
+
+obj.prototype.processNums = function (nums) {    // Line 12
+
+  let factor = 2;
+
+  let offestNums = nums.map(n => {               // Line 16
+    return n + this.offset;
+  });                                            // Line 18
+
+  let sum = offestNums.reduce(accum, n => {      // Line 20
+    return (accum + n) * factor;
+  }, 0);                                         // Line 22
+
+  return this.doSth(sum);                        // Line 24 (bp)
+}                                                // Line 25
+
+// Some other functions after `processNums`......
+```
+
+The functions locations returned by [1] are ordered by the Start-Line-Ordering Logic[2].
+So one possible approach is 
+1. before filtering locations, let's find the nearest bp-enclosing function location, which is to loop locations to find the last location enclosing the bp. Assume we found it at index i. 
+2. Then from index i, loop locations again, remove locations enclosed by locations[i] and stop looping once find the 1st location not enclosed by locations[i].
+   After the step 1~ 2, the locations array in the above example will be like
+    ```js
+    // [
+    //   ... ...
+    //   { end: 8, start:  6  }, // Location 1 before `processNums`
+    //   { end: 25, start: 12 }, // Location 2 within `processNums`
+    //   { end: 36, start: 29 }, // Location 5  after `processNums`
+    //   ... ...
+    // ]
+    ```
+3. Continue the rest of works. We will not mis-judge Location 3 & 4 as out-of-scope
+
+#### Time complexity:
+Assume the locations' length is n.
+
+The step 1 costs n loops. The step 2 costs (n - i) loops. So the total loops are (2n - i).
+
+With some optimization we could do i loops in the step 1. So the total loops could reduced to n.
+
+Theoretically, thw time complexity is linear.
+
+#### Special common case:
+Consider the code as below:
+```js
+(function () {                     // Line 1
+  "user strict";
+
+  // Some codes...
+
+  let a = 1, b = 2;
+
+  obj.doSth = function (n) {
+    return Math.max(
+      // The `this` here will not
+      // be resolved to `obj`
+      n + a + b, this._MAX);
+  }
+
+  // Some codes...
+
+  let result = obj.doSth(100);    // Line 299 (bp)
+})();                             // Line 300 (end of script)
+```
+In the above case, the whole script is in-scope. We basically fall into Chrome Preview mode.
+
+At the bp Line 299, able to preview all variables(closure etc) visible on the call stack.
+
+However, `this` inside `obj.doSth` will be resolved to that `this` for the bp Line 299, not `obj` or `undefined`.
+
+I believe this could be a special and common case.
+
+
+
+
+[1] https://github.com/devtools-html/debugger.html/blob/c5177581a8af4b797f9aa56f82214216de0176c6/src/workers/parser/getOutOfScopeLocations.js#L84
+
+
+
+[2] Start-Line-Ordering Logic: 
+    locA is before locB if locA start line is before locB. If start lines are the same, locA is before locB if locA end line is after locB.
+
+
+
+[3] Chrome Preview
