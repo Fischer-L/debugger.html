@@ -209,7 +209,7 @@ function updateTabList(state: OuterState, url: ?string, tabIndex?: number) {
 
   const urlIndex = tabs.indexOf(url);
   const includesUrl = !!tabs.find(tab => tab == url);
-
+  // debugger; // TMP
   if (includesUrl) {
     if (tabIndex != undefined) {
       tabs = tabs.delete(urlIndex).insert(tabIndex, url);
@@ -218,7 +218,10 @@ function updateTabList(state: OuterState, url: ?string, tabIndex?: number) {
     tabs = tabs.insert(0, url);
   }
 
-  prefs.tabs = tabs.toJS();
+  let tJS = tabs.toJS();
+  console.log("TMP> url =", url);
+  console.log("TMP> tabs.toJS() =", tabs.toJS());
+  prefs.tabs = tJS;
   return tabs;
 }
 

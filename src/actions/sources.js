@@ -83,15 +83,42 @@ export function newSource(source: Source) {
     if (_source) {
       return;
     }
-
+    console.log(
+      "TMP> Before dispatch state source =",
+      getSource(getState(), source.id)
+    );
+    console.log(
+      "TMP> Before dispatch pendingBreakpoints =",
+      getPendingBreakpointsForSource(getState(), source.url)
+    );
+    console.log("TMP> dispatched", source.id, source.url);
     dispatch({ type: "ADD_SOURCE", source });
+    console.log(
+      "TMP> After dispatch state source =",
+      getSource(getState(), source.id).toJS()
+    );
+    console.log(
+      "TMP> After dispatch pendingBreakpoints =",
+      getPendingBreakpointsForSource(getState(), source.url)
+    );
+    console.log("TMP>                                      ");
 
     if (prefs.clientSourceMapsEnabled) {
       await dispatch(loadSourceMap(source));
     }
-
+    // debugger; // TMP
     await checkSelectedSource(getState(), dispatch, source);
     await checkPendingBreakpoints(getState(), dispatch, source.id);
+    console.log("TMP> End newSource", source.id, source.url);
+    console.log(
+      "TMP> End newSource state source =",
+      getSource(getState(), source.id).toJS()
+    );
+    console.log(
+      "TMP> End newSource pendingBreakpoints =",
+      getPendingBreakpointsForSource(getState(), source.url)
+    );
+    console.log("TMP>                                      ");
   };
 }
 
