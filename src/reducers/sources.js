@@ -191,7 +191,7 @@ function restoreTabs() {
   if (prefsTabs.length == 0) {
     return;
   }
-
+  console.log("TMP> restoreTabs - Before prefsTabs=", prefsTabs);
   return prefsTabs;
 }
 
