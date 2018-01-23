@@ -22,7 +22,7 @@ import type { SelectedLocation, PendingSelectedLocation } from "./types";
 import type { Action } from "../actions/types";
 import type { Record } from "../utils/makeRecord";
 
-type Tab = string;
+type Tab = Object;
 export type SourceRecord = Record<Source>;
 export type SourcesMap = Map<string, SourceRecord>;
 type TabList = List<Tab>;
@@ -102,17 +102,24 @@ function update(
       return state.set("pendingSelectedLocation", location);
 
     case "ADD_TAB":
+      console.log("TMP> Calling updateTabList for ADD_TAB");
       return state.merge({
-        tabs: updateTabList({ sources: state }, action.source.url)
+        tabs: updateTabList({ sources: state }, action.source, {
+          shouldDisplay: true
+        })
       });
 
     case "MOVE_TAB":
+      console.log("TMP> Calling updateTabList for MOVE_TAB");
       return state.merge({
-        tabs: updateTabList({ sources: state }, action.url, action.tabIndex)
+        tabs: updateTabList({ sources: state }, action.source, {
+          tabIndex: action.tabIndex
+        })
       });
 
     case "CLOSE_TAB":
       prefs.tabs = action.tabs;
+      console.log("TMP> CLOSE_TAB - action.tabs =", action.tabs);
       return state.merge({ tabs: action.tabs });
 
     case "CLOSE_TABS":
@@ -123,11 +130,28 @@ function update(
       return setSourceTextProps(state, action);
 
     case "BLACKBOX":
+      console.log("TMP> Calling updateTabList for BLACKBOX");
+      console.log("TMP> BLACKBOX", action);
       if (action.status === "done") {
-        return state.setIn(
+        console.log("TMP> BLACKBOX - updating", action);
+        console.log("TMP> Before BlackBox =", state.toJS());
+        let newState = state.merge({
+          tabs: updateTabList(
+            {
+              sources: state
+            },
+            {
+              url: action.source.url,
+              isBlackBoxed: action.value.isBlackBoxed
+            }
+          )
+        });
+        newState = newState.setIn(
           ["sources", action.source.id, "isBlackBoxed"],
           action.value.isBlackBoxed
         );
+        console.log("TMP> After BlackBox =", newState.toJS());
+        return newState;
       }
       break;
 
@@ -178,20 +202,51 @@ function updateSource(state: Record<SourcesState>, source: Source | Object) {
   return state.mergeIn(["sources", source.id], source);
 }
 
-export function removeSourceFromTabList(tabs: any, url: string) {
-  return tabs.filter(tab => tab != url);
+export function removeSourceFromTabList(tabs: TabList, url: string) {
+  console.log("TMP> removeSourceFromTabList - tabs, url", tabs, url);
+  return tabs.filter(tab => {
+    // console.log("TMP> removeSourceFromTabList", tab);
+    // if (!window._TMP_removingTabs) window._TMP_removingTabs = [];
+    // window._TMP_removingTabs.push(tab);
+    return tab.url != url;
+  });
+  console.log("TMP> removeSourceFromTabList after - tabs, url", tabs, url);
 }
 
-export function removeSourcesFromTabList(tabs: any, urls: Array<string>) {
+export function removeSourcesFromTabList(tabs: TabList, urls: Array<string>) {
   return urls.reduce((t, url) => removeSourceFromTabList(t, url), tabs);
 }
 
 function restoreTabs() {
+  console.log("TMP> restoreTabs restoreTabs restoreTabs");
   const prefsTabs = prefs.tabs || [];
   if (prefsTabs.length == 0) {
     return;
   }
-  console.log("TMP> restoreTabs - Before prefsTabs=", prefsTabs);
+
+  console.log("TMP> restoreTabs - Before prefs.tabs =", prefs.tabs);
+
+  // Before the tab prefs were in this data structure:
+  //    `[ url_1, url_2, ...]`
+  // but now have changed to
+  //    `[ { url_1, isBlackBoxed, }, { url_2, isBlackBoxed, }, ...]`
+  // So for the backward compatibility, we manage this data structure change
+  // while restoring tab prefs on the initializing state
+  let dirty = false;
+  for (let i = prefsTabs.length - 1; i >= 0; --i) {
+    if (typeof prefsTabs[i] === "string") {
+      prefsTabs[i] = {
+        url: prefsTabs[i],
+        isBlackBoxed: false,
+        shouldDisplay: true
+      };
+      dirty = true;
+    }
+  }
+  if (dirty) {
+    prefs.tabs = prefsTabs;
+  }
+  console.log("TMP> restoreTabs - After prefs.tabs =", prefs.tabs);
   return prefsTabs;
 }
 
@@ -200,22 +255,86 @@ function restoreTabs() {
  * @memberof reducers/sources
  * @static
  */
-function updateTabList(state: OuterState, url: ?string, tabIndex?: number) {
+function updateTabList(state: OuterState, source: Object, options?: Object) {
+  // TMP OLD:
+  // let tabs = state.sources.get("tabs");
+
+  // const urlIndex = tabs.indexOf(url);
+  // const includesUrl = !!tabs.find(tab => tab == url);
+
+  // if (includesUrl) {
+  //   if (tabIndex != undefined) {
+  //     tabs = tabs.delete(urlIndex).insert(tabIndex, url);
+  //   }
+  // } else {
+  //   tabs = tabs.insert(0, url);
+  // }
+
+  // prefs.tabs = tabs.toJS();
+  // return tabs;
+  // TMP OLD END
+
+  let tabIndex = 0;
+  let shouldDisplay = true;
+  const { url, isBlackBoxed } = source;
   let tabs = state.sources.get("tabs");
+  // const index = tabs.findIndex(t => t.get("url") == url);
+  const index = tabs.findIndex(t => t.url == url);
+  console.log("TMP> updateTabList before saving", tabs.toJS());
+  console.log("TMP> updateTabList index =", index);
 
-  const urlIndex = tabs.indexOf(url);
-  const includesUrl = !!tabs.find(tab => tab == url);
-
-  if (includesUrl) {
-    if (tabIndex != undefined) {
-      tabs = tabs.delete(urlIndex).insert(tabIndex, url);
-    }
-  } else {
-    tabs = tabs.insert(0, url);
+  if (index >= 0) {
+    tabIndex = index;
+    shouldDisplay = tabs.get(index).shouldDisplay;
+    tabs = tabs.delete(index);
   }
 
+  if (options) {
+    if (options.tabIndex >= 0) {
+      tabIndex = options.tabIndex;
+    }
+    if (options.shouldDisplay !== undefined) {
+      shouldDisplay = options.shouldDisplay;
+    }
+  }
+
+  const tab = { url, isBlackBoxed, shouldDisplay };
+  tabs = tabs.insert(tabIndex, tab);
   prefs.tabs = tabs.toJS();
+  console.log("TMP> updateTabList after saving", tabs.toJS());
   return tabs;
+
+  // TMP:
+  // let tabIndex = 0;
+  // let shouldDisplay = true;
+  // if (options) {
+  //   tabIndex = options.tabIndex >= 0 ? options.tabIndex : tabIndex;
+  //   shouldDisplay =
+  //   if (options.shouldDisplay !== undefined) {
+
+  //   }
+  // }
+  // let tab = {
+  //   shouldDisplay
+  //   url: source.url,
+  //   isBlackBoxed: source.isBlackBoxed,
+  // };
+  // let tabs = getSourceTabs(state);
+  // window._TMP_updateTabList_sources = state.sources;
+  // console.log("TMP> updateTabList before saving", tabs.toJS());
+  // const index = tabs.findIndex(t => t.url == tab.url);
+  // console.log("TMP> updateTabList index =", index);
+  // if (index >= 0) {
+  //   if (tabIndex === undefined) {
+  //     tabIndex = index;
+  //   }
+  //   tabs = tabs.delete(index).insert(tabIndex, tab);
+  // } else {
+  //   tabs = tabs.insert(0, tab);
+  // }
+  // console.log("TMP> updateTabList after saving", tabs.toJS());
+  // prefs.tabs = tabs.toJS();
+  // return tabs;
 }
 
 /**
@@ -227,9 +346,9 @@ function updateTabList(state: OuterState, url: ?string, tabIndex?: number) {
  * @memberof reducers/sources
  * @static
  */
-export function getNewSelectedSourceId(
+export function OLD_getNewSelectedSourceId(
   state: OuterState,
-  availableTabs: any
+  availableTabs: TabList
 ): string {
   const selectedLocation = state.sources.selectedLocation;
   if (!selectedLocation) {
@@ -240,7 +359,7 @@ export function getNewSelectedSourceId(
 
   const selectedTabUrl = selectedTab ? selectedTab.get("url") : "";
 
-  if (availableTabs.includes(selectedTabUrl)) {
+  if (availableTabs.find(t => t.url == selectedTabUrl)) {
     const sources = state.sources.sources;
     if (!sources) {
       return "";
@@ -257,18 +376,81 @@ export function getNewSelectedSourceId(
     return "";
   }
 
-  const tabUrls = state.sources.tabs.toJS();
-  const leftNeighborIndex = Math.max(tabUrls.indexOf(selectedTabUrl) - 1, 0);
-  const lastAvailbleTabIndex = availableTabs.size - 1;
-  const newSelectedTabIndex = Math.min(leftNeighborIndex, lastAvailbleTabIndex);
-  const availableTab = availableTabs.toJS()[newSelectedTabIndex];
-  const tabSource = getSourceByUrlInSources(
-    state.sources.sources,
-    availableTab
-  );
+  if (availableTabs.size > 0) {
+    const tabs = state.sources.tabs.toJS();
+    const leftNeighborIndex = Math.max(
+      tabs.findIndex(t => t.url == selectedTabUrl) - 1,
+      0
+    );
+    const lastAvailbleTabIndex = availableTabs.size - 1;
+    const newSelectedTabIndex = Math.min(
+      leftNeighborIndex,
+      lastAvailbleTabIndex
+    );
+    const availableTab = availableTabs.toJS()[newSelectedTabIndex];
+    const tabSource = getSourceByUrlInSources(
+      state.sources.sources,
+      availableTab.url
+    );
+    if (tabSource) {
+      return tabSource.get("id");
+    }
+  }
 
-  if (tabSource) {
-    return tabSource.get("id");
+  return "";
+}
+
+export function getNewSelectedSourceId(
+  state: OuterState,
+  tabs: TabList
+): string {
+  const selectedLocation = state.sources.selectedLocation;
+  if (!selectedLocation) {
+    return "";
+  }
+
+  const selectedTab = state.sources.sources.get(selectedLocation.sourceId);
+
+  const selectedTabUrl = selectedTab ? selectedTab.get("url") : "";
+
+  const availableTabs = tabs.filter(t => t.shouldDisplay);
+
+  if (availableTabs.find(t => t.url == selectedTabUrl)) {
+    const sources = state.sources.sources;
+    if (!sources) {
+      return "";
+    }
+
+    const selectedSource = sources.find(
+      source => source.get("url") == selectedTabUrl
+    );
+
+    if (selectedSource) {
+      return selectedSource.get("id");
+    }
+
+    return "";
+  }
+
+  if (availableTabs.size > 0) {
+    const tabs = state.sources.tabs.toJS();
+    const leftNeighborIndex = Math.max(
+      tabs.findIndex(t => t.url == selectedTabUrl) - 1,
+      0
+    );
+    const lastAvailbleTabIndex = availableTabs.size - 1;
+    const newSelectedTabIndex = Math.min(
+      leftNeighborIndex,
+      lastAvailbleTabIndex
+    );
+    const availableTab = availableTabs.toJS()[newSelectedTabIndex];
+    const tabSource = getSourceByUrlInSources(
+      state.sources.sources,
+      availableTab.url
+    );
+    if (tabSource) {
+      return tabSource.get("id");
+    }
   }
 
   return "";
@@ -340,13 +522,18 @@ const getTabs = createSelector(getSourcesState, sources => sources.tabs);
 export const getSourceTabs = createSelector(
   getTabs,
   getSources,
-  (tabs, sources) => tabs.filter(tab => getSourceByUrlInSources(sources, tab))
+  (tabs, sources) => {
+    console.log("TMP> getSourceTabs tabs =", tabs);
+    // console.error(new Error("rtyuighjhj"));
+    return tabs.filter(tab => getSourceByUrlInSources(sources, tab.url));
+  }
 );
 
 export const getSearchTabs = createSelector(
   getTabs,
   getSources,
-  (tabs, sources) => tabs.filter(tab => !getSourceByUrlInSources(sources, tab))
+  (tabs, sources) =>
+    tabs.filter(tab => !getSourceByUrlInSources(sources, tab.url))
 );
 
 export const getSourcesForTabs = createSelector(
@@ -354,7 +541,18 @@ export const getSourcesForTabs = createSelector(
   getSources,
   (tabs: TabList, sources: SourcesMap) => {
     return tabs
-      .map(tab => getSourceByUrlInSources(sources, tab))
+      .map(tab => getSourceByUrlInSources(sources, tab.url))
+      .filter(source => source);
+  }
+);
+
+export const getSourcesForTabsShouldDisplay = createSelector(
+  getSourceTabs,
+  getSources,
+  (tabs: TabList, sources: SourcesMap) => {
+    return tabs
+      .filter(tab => !!tab.shouldDisplay)
+      .map(tab => getSourceByUrlInSources(sources, tab.url))
       .filter(source => source);
   }
 );

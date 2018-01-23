@@ -153,7 +153,7 @@ type SourceAction =
       value: { isBlackBoxed: boolean }
     }
   | { type: "ADD_TAB", source: Source, tabIndex: number }
-  | { type: "MOVE_TAB", url: string, tabIndex: number }
+  | { type: "MOVE_TAB", source: Source, tabIndex: number }
   | { type: "CLOSE_TAB", url: string, tabs: any }
   | { type: "CLOSE_TABS", urls: string[], tabs: any };
 

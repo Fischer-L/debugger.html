@@ -8,7 +8,7 @@
  * Redux actions for the sources state
  * @module actions/sources
  */
-
+import { toggleBlackBox } from "./blackbox";
 import { syncBreakpoint } from "../breakpoints";
 import { loadSourceText } from "./loadSourceText";
 import { togglePrettyPrint } from "./prettyPrint";
@@ -124,6 +124,60 @@ function checkPendingBreakpoints(sourceId) {
   };
 }
 
+function OLD_restoreSourcesTabState(...sources) {
+  const tabPrefs = prefs.tabs || [];
+  if (tabPrefs.length == 0) {
+    return;
+  }
+
+  console.log("TMP> restoreSourcesTabState - Before prefs.tabs =", prefs.tabs);
+
+  // This is for the backward compatibility.
+  // Before the tab prefs were in this data structure:
+  //    `[ url_1, url_2, ...]`
+  // but now have changed to
+  //    `[ { url_1, isBlackBoxed, }, { url_2, isBlackBoxed, }, ...]`
+  let dirty = false;
+  for (let i = tabPrefs.length - 1; i >= 0; --i) {
+    if (typeof tabPrefs[i] === "string") {
+      tabPrefs[i] = {
+        url: tabPrefs[i],
+        isBlackBoxed: false
+      };
+      dirty = true;
+    }
+  }
+  if (dirty) {
+    prefs.tabs = tabPrefs;
+  }
+  console.log("TMP> restoreSourcesTabState - After prefs.tabs =", prefs.tabs);
+
+  for (const source of sources) {
+    let tabPref = tabPrefs.find(pref => pref.url === source.url);
+    if (tabPref && tabPref.isBlackBoxed !== source.isBlackBoxed) {
+      console.log("TMP> restoreSourcesTabState - toggleBlackBox =", source);
+      toggleBlackBox(source);
+    }
+  }
+}
+
+function restoreSourcesTabState(...sources) {
+  return async ({ dispatch, getState }: ThunkArgs) => {
+    const tabPrefs = prefs.tabs || [];
+    if (tabPrefs.length == 0) {
+      return;
+    }
+
+    for (const source of sources) {
+      let tabPref = tabPrefs.find(pref => pref.url === source.url);
+      if (tabPref && tabPref.isBlackBoxed !== source.isBlackBoxed) {
+        console.log("TMP> restoreSourcesTabState - toggleBlackBox =", source);
+        await dispatch(toggleBlackBox(source));
+      }
+    }
+  };
+}
+
 /**
  * Handler for the debugger client's unsolicited newSource notification.
  * @memberof actions/sources
@@ -141,7 +195,7 @@ export function newSource(source: Source) {
     if (prefs.clientSourceMapsEnabled) {
       dispatch(loadSourceMap(source));
     }
-
+    await dispatch(restoreSourcesTabState(source));
     dispatch(checkSelectedSource(source));
     dispatch(checkPendingBreakpoints(source.id));
   };
@@ -162,6 +216,8 @@ export function newSources(sources: Source[]) {
       sources: filteredSources
     });
 
+    console.log("TMP> solicited newSources -", filteredSources);
+    await dispatch(restoreSourcesTabState(...filteredSources));
     for (const source of filteredSources) {
       dispatch(checkSelectedSource(source));
       dispatch(checkPendingBreakpoints(source.id));

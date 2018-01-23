@@ -27,6 +27,7 @@ function setDocument(key: string, doc: any) {
 }
 
 function removeDocument(key: string) {
+  window._TMP_sourceDocs = sourceDocs;
   delete sourceDocs[key];
 }
 

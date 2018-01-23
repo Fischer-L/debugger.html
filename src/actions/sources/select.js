@@ -25,6 +25,7 @@ import { getGeneratedLocation } from "../../utils/source-maps";
 
 import {
   getSource,
+  getSourceTabs,
   getSourceByURL,
   getSelectedSource,
   getPrettySource,
@@ -79,8 +80,9 @@ export function selectSourceURL(
  * @static
  */
 export function selectSource(sourceId: string, tabIndex: string = "") {
-  return async ({ dispatch }: ThunkArgs) => {
+  return async ({ dispatch, getState }: ThunkArgs) => {
     const location = createLocation({ sourceId });
+    // console.log("TMP> selectSource tabs =", getSourceTabs(getState()).toJS());
     return await dispatch(selectLocation(location, tabIndex));
   };
 }
@@ -108,6 +110,16 @@ export function selectLocation(location: Location, tabIndex: string = "") {
       dispatch(closeActiveSearch());
     }
 
+    // TMP
+    // const url = source.get("url");
+    // const tabs = getSourceTabs(getState());
+    // if (!tabs.find(t => t.url === url)) {
+    //   console.log("TMP> selectLocation", url, tabs.toJS());
+    //   dispatch(addTab(source.toJS(), 0));
+    // }
+    // TMP
+    // XXX: Here got an empty tabs after closing tabs, sthwrong but previous patch fine
+    console.log("TMP> selectLocation tabs =", getSourceTabs(getState()).toJS());
     dispatch(addTab(source.toJS(), 0));
 
     dispatch({

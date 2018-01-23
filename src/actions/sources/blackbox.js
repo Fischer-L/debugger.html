@@ -17,6 +17,14 @@ export function toggleBlackBox(source: Source) {
   return async ({ dispatch, getState, client, sourceMaps }: ThunkArgs) => {
     const { isBlackBoxed, id } = source;
 
+    // window._TMP_blackbox_test = 1;
+    // if (window._TMP_blackbox_test) {
+    //   return dispatch({
+    //     type: "BLACKBOX",
+    //     source,
+    //     [PROMISE]: Promise.resolve("done")
+    //   });
+    // }
     return dispatch({
       type: "BLACKBOX",
       source,

@@ -14,7 +14,8 @@ import {
   getSourcesForTabs,
   getActiveSearch,
   getSearchTabs,
-  getSourceMetaData
+  getSourceMetaData,
+  getSourcesForTabsShouldDisplay
 } from "../../selectors";
 import { isVisible } from "../../utils/ui";
 
@@ -304,7 +305,7 @@ class SourceTabs extends PureComponent<Props, State> {
     const hiddenSourceTabs = getHiddenTabs(sourceTabs, sourceTabEls);
 
     if (isVisible() && hiddenSourceTabs.indexOf(selectedSource) !== -1) {
-      return moveTab(selectedSource.get("url"), 0);
+      return moveTab(selectedSource.toJS(), 0);
     }
 
     this.setState({ hiddenSourceTabs });
@@ -345,6 +346,17 @@ class SourceTabs extends PureComponent<Props, State> {
       return;
     }
 
+    // TMP
+    // return (
+    //   <div className="source-tabs" ref="sourceTabs">
+    //     {sourceTabs.filter(t => {
+    //       if (!window._TMP_sss) window._TMP_sss = [];
+    //       window._TMP_sss.push(t);
+    //       return true;
+    //     }).map(this.renderSourceTab)}
+    //   </div>
+    // );
+    // TMP ORIG
     return (
       <div className="source-tabs" ref="sourceTabs">
         {sourceTabs.map(this.renderSourceTab)}
@@ -497,13 +509,14 @@ class SourceTabs extends PureComponent<Props, State> {
 
 export default connect(
   state => {
-    const sourceTabs = getSourcesForTabs(state);
+    // const sourceTabs = getSourcesForTabs(state); TMP ORIG
+    const sourceTabs = getSourcesForTabsShouldDisplay(state); // TMP
     const sourceTabsMetaData = {};
     sourceTabs.forEach(source => {
       const sourceId = source ? source.get("id") : "";
       sourceTabsMetaData[sourceId] = getSourceMetaData(state, sourceId);
     });
-
+    // console.log("TMP> sourceTabs =", sourceTabs.toJS());
     return {
       selectedSource: getSelectedSource(state),
       searchTabs: getSearchTabs(state),
