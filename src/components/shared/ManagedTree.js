@@ -154,6 +154,7 @@ class ManagedTree extends Component<Props, State> {
           onExpand={item => this.setExpanded(item, true, false)}
           onCollapse={item => this.setExpanded(item, false, false)}
           onFocus={this.focusItem}
+          onScroll={this.props.onScroll}
           renderItem={(...args) =>
             this.props.renderItem(...args, {
               setExpanded: this.setExpanded

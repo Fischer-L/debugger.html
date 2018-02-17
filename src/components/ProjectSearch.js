@@ -162,7 +162,10 @@ export class ProjectSearch extends Component<Props, State> {
     this.focusedItem = null;
     const query = sanitizeQuery(this.state.inputValue);
     if (query) {
-      this.props.searchSources(query);
+      console.log("TMP> query =", query);
+      this.props.searchSources(query, {
+        reusePreviousResults: window.reusePreviousResults
+      });
     }
   };
 
@@ -244,13 +247,21 @@ export class ProjectSearch extends Component<Props, State> {
     return this.renderMatch(item, focused);
   };
 
+  onScroll = e => {
+    console.log("TMP> onTreeScroll");
+    window._TMP_tree_scroll_event = e;
+  };
+
   renderResults = () => {
     const results = this.getResults();
     const { status } = this.props;
     if (!this.props.query) {
       return;
     }
-    if (results.length && status === statusType.done) {
+    let TMP_RENDER_SEARCH = 1;
+    window._TMP_search_results = results;
+    if (TMP_RENDER_SEARCH && results.length && status === statusType.done) {
+      console.log("TMP> Rendering search results");
       return (
         <ManagedTree
           getRoots={() => results}
@@ -261,6 +272,7 @@ export class ProjectSearch extends Component<Props, State> {
           getParent={item => null}
           getPath={getFilePath}
           renderItem={this.renderItem}
+          onScroll={this.onScroll}
         />
       );
     }
