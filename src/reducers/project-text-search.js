@@ -22,10 +22,16 @@ export type Search = {
   filepath: string,
   matches: I.List<any>
 };
-export type StatusType = "INITIAL" | "FETCHING" | "DONE" | "ERROR";
+export type StatusType =
+  | "INITIAL"
+  | "FETCHING"
+  | "PARTIAL_UPDATING"
+  | "DONE"
+  | "ERROR";
 export const statusType = {
   initial: "INITIAL",
   fetching: "FETCHING",
+  partialUpdating: "PARTIAL_UPDATING",
   done: "DONE",
   error: "ERROR"
 };

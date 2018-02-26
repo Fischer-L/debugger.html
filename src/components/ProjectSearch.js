@@ -260,8 +260,12 @@ export class ProjectSearch extends Component<Props, State> {
     }
     let TMP_RENDER_SEARCH = 1;
     window._TMP_search_results = results;
-    if (TMP_RENDER_SEARCH && results.length && status === statusType.done) {
-      console.log("TMP> Rendering search results");
+    if (
+      TMP_RENDER_SEARCH &&
+      results.length &&
+      (status === statusType.done || status === statusType.partialUpdating)
+    ) {
+      console.log("TMP> Rendering search results at status =", status);
       return (
         <ManagedTree
           getRoots={() => results}

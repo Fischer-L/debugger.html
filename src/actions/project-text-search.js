@@ -45,7 +45,7 @@ export function closeProjectSearch() {
   return { type: "CLOSE_PROJECT_SEARCH" };
 }
 
-// export function ORIG_searchSources(query: string) {
+// export function searchSources(query: string) {
 //   return async ({ dispatch, getState }: ThunkArgs) => {
 //     await dispatch(clearSearchResults());
 //     await dispatch(addSearchQuery(query));
@@ -63,10 +63,11 @@ export function closeProjectSearch() {
 //           !isThirdParty(source)
 //       );
 
-//       let TMP_c = 0;
+//     window._TMP_validSources = validSources;
+//     let TMP_c = 0;
 
 //     for (const source of validSources) {
-//       if (TMP_c > 5) break;
+//       if (TMP_c > 1) break;
 //       await dispatch(loadSourceText(source));
 //       await dispatch(searchSource(source.get("id"), query));
 //       console.log("TMP_c =", TMP_c);
@@ -79,65 +80,105 @@ export function closeProjectSearch() {
 //   };
 // }
 
-function batchSearchSources(sources, query, limit) {
+let batchSearchHandle = null;
+
+function requestBatchSearch(sources, query) {
   return async ({ dispatch, getState }: ThunkArgs) => {
-    console.log("TMP> batchSearchSources");
-    let matchCount = 0;
-    for (const source of sources) {
+    console.log("doing batchSearchHandle", batchSearchHandle);
+    let limit = 500;
+    let source = sources.shift();
+    while (source) {
       await dispatch(loadSourceText(source));
-      const loadedSource = getSource(getState(), source.get("id"));
-      const matches = await findSourceMatches(loadedSource.toJS(), query);
+      const sourceRecord = getSource(getState(), source.get("id")).toJS();
+      const matches = await findSourceMatches(sourceRecord, query);
       if (matches.length) {
-        matchCount += matches.length;
         dispatch({
           type: "ADD_SEARCH_RESULT",
           result: {
-            sourceId: loadedSource.get("id"),
-            filepath: loadedSource.get("url"),
+            sourceId: source.get("id"),
+            filepath: source.get("url"),
             matches
           }
         });
       }
-      if (matchCount >= limit) {
+      limit -= matches.length;
+      if (limit > 0) {
+        source = sources.shift();
+      } else {
         break;
       }
     }
+
+    if (sources.length > 0) {
+      batchSearchHandle = window.requestIdleCallback(() => {
+        batchSearchHandle = window.requestIdleCallback(() => {
+          console.log(
+            "requestIdleCallback batchSearchHandle",
+            batchSearchHandle
+          );
+          dispatch(requestBatchSearch(sources, query));
+        });
+      });
+      dispatch(updateSearchStatus(statusType.partialUpdating));
+      return;
+    }
+    dispatch(updateSearchStatus(statusType.done));
   };
 }
 
-export function searchSources(query: string, option = {}) {
+function cancelBatchSearch() {
+  if (batchSearchHandle) {
+    window.cancelIdleCallback(batchSearchHandle);
+    batchSearchHandle = null;
+  }
+}
+
+// function addSearchResult(dispatch, sourceId, query) {
+//   const sourceRecord = getSource(getState(), sourceId);
+//   if (!sourceRecord) {
+//     return 0;
+//   }
+//   const matches = await findSourceMatches(sourceRecord.toJS(), query);
+//   if (!matches.length) {
+//     return 0;
+//   }
+//   dispatch({
+//     type: "ADD_SEARCH_RESULT",
+//     result: {
+//       sourceId: sourceRecord.get("id"),
+//       filepath: sourceRecord.get("url"),
+//       matches
+//     }
+//   });
+//   return matches.length;
+// }
+
+export function searchSources(query: string) {
   return async ({ dispatch, getState }: ThunkArgs) => {
-    const reusePreviousResults =
-      !!option.reusePreviousResults && getTextSearchQuery(getState()) == query;
-    console.log("reusePreviousResults =", reusePreviousResults);
-    if (!reusePreviousResults) {
-      await dispatch(clearSearchResults());
-      await dispatch(addSearchQuery(query));
-    }
+    cancelBatchSearch();
+
+    await dispatch(clearSearchResults());
+    await dispatch(addSearchQuery(query));
     dispatch(updateSearchStatus(statusType.fetching));
     const sources = getSources(getState());
-    const previousResults = getTextSearchResults(getState());
-    console.log("previousResults =", previousResults);
-    window.previousResults = previousResults;
-    let validSources = sources.valueSeq().filter(source => {
-      let valid =
-        hasPrettySource(getState(), source.get("id")) && isThirdParty(source);
-      if (reusePreviousResults && previousResults.size) {
-        console.log("previousResults =", previousResults);
-        valid = !previousResults.find(
-          result => result.sourceId == source.get("id")
-        );
-      }
-      return valid;
-    });
-    await dispatch(batchSearchSources(validSources, query, 500));
-    dispatch(updateSearchStatus(statusType.done));
-    console.log("TMP> After updateSearchStatus");
+
+    // TMP: sources are js files
+    window._TMP_ss = sources;
+
+    const validSources = sources
+      .valueSeq()
+      .filter(
+        source =>
+          !hasPrettySource(getState(), source.get("id")) &&
+          !isThirdParty(source)
+      );
+    await dispatch(requestBatchSearch(Array.from(validSources), query));
   };
 }
 
 export function searchSource(sourceId: string, query: string) {
   return async ({ dispatch, getState }: ThunkArgs) => {
+    await dispatch(clearSearchResults());
     const sourceRecord = getSource(getState(), sourceId);
     if (!sourceRecord) {
       return;
